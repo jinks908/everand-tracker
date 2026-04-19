@@ -3,13 +3,15 @@
 Everand Unlock Credit Tracker
 ------------------------------
 Tracks your monthly unlock credits (3/month, rollover up to 6 months).
-Run weekly via cron or Task Scheduler.
+Run weekly via cron, launchd, or Task Scheduler.
 
 Usage:
-  python everand_tracker.py              # Auto-scrape (requires Playwright setup)
-  python everand_tracker.py --credits 9  # Manual credit count override
-  python everand_tracker.py --status     # Print current state without updating
-  python everand_tracker.py --setup      # Interactive first-time setup
+  python everand_tracker.py                     # Auto-scrape (requires Playwright setup)
+  python everand_tracker.py --credits <num>     # Manual credit count override
+  python everand_tracker.py --status            # Print current state without updating
+  python everand_tracker.py --setup             # Interactive first-time setup
+  python everand_tracker.py --schedule          # Show scheduling instructions
+  python everand_tracker.py --generate-plist    # Generate a launchd plist for scheduling
 """
 
 import argparse
