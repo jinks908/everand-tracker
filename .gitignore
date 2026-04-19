@@ -1,0 +1,6 @@
+__pycache__/
+.DS_Store
+config.json
+credits.json
+scraper_debug.html
+session.json
