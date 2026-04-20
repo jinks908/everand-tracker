@@ -144,6 +144,13 @@ def check_expiring(state: dict, today: date) -> list[dict]:
 
 #:#  Display
 #;# ─────────────────────────────────────────────────────────────── #
+# Format date for display (MM-DD-YYYY)
+def fmt(d) -> str:
+    if isinstance(d, str):
+        d = date.fromisoformat(d)
+    return d.strftime("%m-%d-%Y")
+
+
 def print_status(state: dict, today: date):
     active = [
         b for b in state["batches"]
@@ -152,7 +159,7 @@ def print_status(state: dict, today: date):
     total = sum(b["remaining"] for b in active)
 
     print(f"\n{'═' * 52}")
-    print(f"  Everand Unlock Credits — {today}")
+    print(f"  Everand Unlock Credits — {fmt(today)}")
     print(f"{'═' * 52}")
     print(f"  Total available: {total} credit(s)\n")
 
@@ -168,7 +175,7 @@ def print_status(state: dict, today: date):
                 status = f"🟡 {days_left}d left"
             else:
                 status = f"🟢 {days_left}d left"
-            print(f"  {b['earned']:<14} {b['expires']:<14} {b['remaining']:<10} {status}")
+            print(f"  {fmt(b['earned']):<14} {fmt(b['expires']):<14} {b['remaining']:<10} {status}")
     else:
         print("  No active credits.")
 
@@ -546,6 +553,12 @@ def main():
     parser.add_argument("--schedule", action="store_true", help="Show scheduling instructions")
     parser.add_argument("--generate-plist", action="store_true", help="Generate and install a launchd plist for weekly runs")
     args = parser.parse_args()
+
+    # Add separation header with run date (only on normal runs)
+    if not any([args.schedule, args.setup, args.generate_plist, args.status]):
+        print(f"\n{'─' * 52}")
+        print(f"  Run started: {date.today().strftime('%m-%d-%Y')}")
+        print(f"{'─' * 52}")
 
     if args.schedule:
         print_schedule_help()
