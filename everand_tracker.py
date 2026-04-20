@@ -41,7 +41,7 @@ def load_state() -> dict:
     if STATE_FILE.exists():
         with open(STATE_FILE) as f:
             return json.load(f)
-    return {"batches": [], "last_known_count": 0, "last_run": None}
+    return {"batches": [], "last_known_count": 0, "last_run": None, "next_batch_date": None}
 
 
 def save_state(state: dict):
@@ -157,11 +157,13 @@ def print_status(state: dict, today: date):
         if date.fromisoformat(b["expires"]) >= today and b["remaining"] > 0
     ]
     total = sum(b["remaining"] for b in active)
+    arrival = state.get("next_batch_date", "Unknown")
 
     print(f"\n{'═' * 52}")
     print(f"  Everand Unlock Credits — {fmt(today)}")
     print(f"{'═' * 52}")
-    print(f"  Total available: {total} credit(s)\n")
+    print(f"  Total available: {total} credit(s)")
+    print(f"  Next unlocks arrive on: {arrival}\n")
 
     if active:
         print(f"  {'Earned':<14} {'Expires':<14} {'Remaining':<10} {'Status'}")
@@ -293,7 +295,51 @@ def notify(warnings: list[dict], config: dict):
 
 #:#  Playwright Scraper
 #;# ─────────────────────────────────────────────────────────────── #
-def scrape_credit_count(config: dict) -> int | None:
+# Parse credit count from page source
+def scrape_credit_count(content: dict) -> int | None:
+    import re
+    # Unlock credit count pattern
+    patterns = [
+        r'(\d+)\s+unlocks?\s+available',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            count = int(match.group(1))
+            print(f"\n✅  Scraped credit count: {count}")
+            return count
+
+    print("⚠️  Could not parse credit count from page. Selector may need updating.")
+    print("    Save the page HTML to debug: check scraper_debug.html")
+    with open(Path(__file__).parent / "scraper_debug.html", "w") as f:
+        f.write(content)
+    return None
+
+
+# Parse next credit batch date
+def scrape_next_batch_date(content: dict) -> str | None:
+    import re
+    # Next batch date pattern
+    patterns = [
+        r'Unlocks renew monthly on (\w+ \d{1,2})\.',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            batch_date = str(match.group(1))
+            print(f"✅  Next unlocks arrive on: {batch_date}")
+            return batch_date
+
+    print("⚠️  Could not parse next batch date from page. Selector may need updating.")
+    print("    Save the page HTML to debug: check scraper_debug.html")
+    with open(Path(__file__).parent / "scraper_debug.html", "w") as f:
+        f.write(content)
+    return None
+
+
+def scrape_data(config: dict) -> int | None:
     """
     Log into Everand and scrape the current credit count.
     Requires: pip install playwright && playwright install chromium
@@ -407,25 +453,10 @@ def scrape_credit_count(config: dict) -> int | None:
             context.close()
             browser.close()
 
-            # Parse credit count from page source
-            import re
-            # Unlock credit count pattern
-            patterns = [
-                r'(\d+)\s+unlocks?\s+available',
-            ]
+            credit_count = scrape_credit_count(content)
+            next_batch = scrape_next_batch_date(content)
 
-            for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE)
-                if match:
-                    count = int(match.group(1))
-                    print(f"✅  Scraped credit count: {count}")
-                    return count
-
-            print("⚠️  Could not parse credit count from page. Selector may need updating.")
-            print("    Save the page HTML to debug: check scraper_debug.html")
-            with open(Path(__file__).parent / "scraper_debug.html", "w") as f:
-                f.write(content)
-            return None
+            return credit_count, next_batch
 
     except Exception as e:
         print(f"❌  Scraper error: {e}")
@@ -580,14 +611,18 @@ def main():
         print_status(state, today)
         return
 
-    # Determine credit count
+    # Determine credit count (int) and next batch date (str)
+    scrape_values = (None, None)
     new_count = None
+    next_batch_date = None
 
     if args.credits is not None:
         new_count = args.credits
         print(f"📝  Using manual credit count: {new_count}")
     elif config.get("use_scraper"):
-        new_count = scrape_credit_count(config)
+        scrape_values = scrape_data(config) or (None, None)
+        new_count = scrape_values[0]
+        next_batch_date = scrape_values[1]
 
     if new_count is None:
         print("ℹ️   No credit count provided. Use --credits N or enable scraping in config.")
@@ -597,6 +632,8 @@ def main():
 
     # Reconcile and save
     logs = reconcile(state, new_count, today)
+    if next_batch_date is not None:
+        state["next_batch_date"] = next_batch_date
     save_state(state)
 
     for log in logs:
