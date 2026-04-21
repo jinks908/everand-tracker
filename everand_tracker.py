@@ -252,22 +252,42 @@ def print_console_alert(warnings: list[dict]):
 
 ## Alerter Notification (macOS)
 def send_alerter_notification(warnings: list[dict]):
+    # Run shell commands and capture I/O
     import subprocess
 
     alerter_path = None
+    # Check common installation paths for alerter binary
     for candidate in ["/opt/homebrew/bin/alerter", "/usr/local/bin/alerter", "alerter"]:
         if Path(candidate).is_file() or candidate == "alerter":
             alerter_path = candidate
             break
 
+    # Everand icon for notification
     icon = Path(__file__).parent / "everand_icon.png"
     summary = f"{sum(w['remaining'] for w in warnings)} unlock credit(s) expiring soon"
     detail = "; ".join(f"{w['remaining']} expire {w['expires']} ({w['days_left']}d)" for w in warnings)
     try:
-        subprocess.run(
-            [alerter_path, "--title", "Everand Credits", "--message", detail, "--subtitle", summary, "--app-icon", str(icon)],
-            check=True
+        # Spawn alerter process with arguments
+        result = subprocess.run(
+            [
+                alerter_path,
+                "--title", "Everand Credits",
+                "--message", detail,
+                "--subtitle", summary,
+                "--app-icon", str(icon),
+                "--actions", "Go to Account",
+                "--timeout", "20",
+            ],
+            capture_output=True,
+            text=True,
         )
+        # Check for user click action
+        answer = result.stdout.strip()
+        if answer in ("@CONTENTCLICKED", "@ACTIONCLICKED", "Go to Account"):
+            # Open user account page in the default browser
+            subprocess.run(["open", "https://www.everand.com/your-account"])
+
+        # Print confirmation / failure messages
         print("🔔  Alerter notification sent.")
     except FileNotFoundError:
         print("❌  alerter not found in /opt/homebrew/bin or /usr/local/bin.")
