@@ -19,7 +19,7 @@ import json
 import smtplib
 import sys
 import keyring
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -159,9 +159,9 @@ def print_status(state: dict, today: date):
     total = sum(b["remaining"] for b in active)
     arrival = state.get("next_batch_date", "Unknown")
 
-    print(f"\n{'═' * 52}")
+    print(f"\n{'─' * 59}")
     print(f"  Everand Unlock Credits — {fmt(today)}")
-    print(f"{'═' * 52}")
+    print(f"{'─' * 59}")
     print(f"  Total available: {total} credit(s)")
     print(f"  Next unlocks arrive on: {arrival}\n")
 
@@ -181,7 +181,7 @@ def print_status(state: dict, today: date):
     else:
         print("  No active credits.")
 
-    print(f"{'═' * 52}\n")
+    print(f"{'─' * 59}\n")
 
 
 #:#  Notifications
@@ -242,9 +242,9 @@ def send_desktop_notification(warnings: list[dict]):
 
 ## Console Alert
 def print_console_alert(warnings: list[dict]):
-    print("\n" + "!" * 52)
+    print("\n" + "!" * 59)
     print("  ⏰  EXPIRING CREDITS ALERT")
-    print("!" * 52)
+    print("!" * 59)
     for w in warnings:
         print(f"  {w['remaining']} credit(s) from {w['earned']} expire in {w['days_left']} day(s) ({w['expires']})")
     print("  → Go to https://www.everand.com and use them!\n")
@@ -381,7 +381,7 @@ def scrape_data(config: dict) -> int | None:
         print("ℹ️   Everand credentials not in config.json (everand_email / everand_password).")
         return None
 
-    print("🌐  Logging into Everand to fetch credit count...")
+    print("   Logging into Everand ...")
 
     # Create a session file path for Playwright to save auth state (cookies/localStorage)
     SESSION_FILE = Path(__file__).parent / "session.json"
@@ -405,7 +405,7 @@ def scrape_data(config: dict) -> int | None:
 
             if has_session:
                 # Saved session — go straight to account page
-                print("  → Using saved session...")
+                print("   Using saved session ...")
                 page.goto(
                     "https://www.everand.com/your-account",
                     wait_until="domcontentloaded",
@@ -413,14 +413,14 @@ def scrape_data(config: dict) -> int | None:
                 )
                 # If session expired, we'll land back on a login page
                 if "everand.com" not in page.url or "login" in page.url or "auth.scribd" in page.url:
-                    print("  → Session expired, deleting and re-run to log in fresh.")
+                    print("   Session expired, deleting and re-run to log in fresh.")
                     SESSION_FILE.unlink(missing_ok=True)
                     context.close()
                     browser.close()
                     return None
             else:
                 # First run — full login flow with MFA handling
-                print("  → No saved session. Opening browser for first-time login...")
+                print("    No saved session. Opening browser for first-time login ...")
                 page.goto("https://www.everand.com", wait_until="domcontentloaded", timeout=45000)
 
                 for selector in [
@@ -436,7 +436,7 @@ def scrape_data(config: dict) -> int | None:
                     except PWTimeout:
                         continue
 
-                print("  → Waiting for auth page...")
+                print("    Waiting for auth page ...")
                 page.wait_for_url("**/auth.scribd.com/**", timeout=20000)
                 page.wait_for_load_state("domcontentloaded")
 
@@ -450,14 +450,14 @@ def scrape_data(config: dict) -> int | None:
 
                 # Check if MFA challenge appeared instead of redirect
                 if "mfa" in page.url or "auth.scribd.com" in page.url:
-                    print("  → MFA challenge detected.")
-                    code = input("  → Enter the 6-digit code from your email: ").strip()
+                    print("    MFA challenge detected.")
+                    code = input("    Enter the 6-digit code from your email: ").strip()
                     page.wait_for_selector('input[name="code"], input[autocomplete="one-time-code"]', timeout=10000)
                     page.fill('input[name="code"], input[autocomplete="one-time-code"]', code)
                     with page.expect_navigation(url="**everand.com**", wait_until="commit", timeout=30000):
                         page.click('button[type="submit"]')
 
-                print("  → Logged in. Navigating to account page...")
+                print("    Logged in. Navigating to account page ...")
                 page.goto(
                     "https://www.everand.com/your-account",
                     wait_until="domcontentloaded",
@@ -466,7 +466,7 @@ def scrape_data(config: dict) -> int | None:
 
                 # Save session for future runs
                 context.storage_state(path=str(SESSION_FILE))
-                print(f"  → Session saved to {SESSION_FILE.name}. Future runs won't need MFA.")
+                print(f"    Session saved to {SESSION_FILE.name}. Future runs won't need MFA.")
 
             page.wait_for_timeout(3000)
             content = page.content()
@@ -506,7 +506,7 @@ def run_setup():
         config["everand_email"] = input("Everand email: ").strip()
         config["everand_password"] = input("Everand password: ").strip()
         config["use_scraper"] = True
-        print("  → Run: pip install playwright && playwright install chromium")
+        print("    Run: pip install playwright && playwright install chromium")
     else:
         config["use_scraper"] = False
 
@@ -605,11 +605,11 @@ def main():
     parser.add_argument("--generate-plist", action="store_true", help="Generate and install a launchd plist for weekly runs")
     args = parser.parse_args()
 
-    # Add separation header with run date (only on normal runs)
+    # Add separation header with timestamp (only on normal runs)
     if not any([args.schedule, args.setup, args.generate_plist, args.status]):
-        print(f"\n{'─' * 52}")
-        print(f"  Run started: {date.today().strftime('%m-%d-%Y')}")
-        print(f"{'─' * 52}")
+        print(f"\n{'─' * 59}")
+        print(f"  Run started at {datetime.now().strftime('%I:%M:%S %p')} on {date.today().strftime('%m-%d-%Y')}")
+        print(f"{'─' * 59}")
 
     if args.schedule:
         print_schedule_help()
