@@ -594,6 +594,14 @@ def generate_plist():
     print(f"\nLogs will be written to: {script.parent}/everand_tracker.log")
 
 
+def load_plist():
+    plist_path = Path.home() / "Library" / "LaunchAgents" / "com.everand.tracker.plist"
+    if not plist_path.exists():
+        print(f"⚠️  Plist not found at {plist_path}. Run --generate-plist first.")
+        return None
+    return plist_path.read_text()
+
+
 #:#  Main
 #;# ─────────────────────────────────────────────────────────────── #
 def main():
