@@ -327,7 +327,6 @@ def scrape_credit_count(content: dict) -> int | None:
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
             count = int(match.group(1))
-            print(f"\n✅  Scraped credit count: {count}")
             return count
 
     print("⚠️  Could not parse credit count from page. Selector may need updating.")
@@ -349,7 +348,6 @@ def scrape_next_batch_date(content: dict) -> str | None:
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
             batch_date = str(match.group(1))
-            print(f"✅  Next unlocks arrive on: {batch_date}")
             return batch_date
 
     print("⚠️  Could not parse next batch date from page. Selector may need updating.")
@@ -593,6 +591,9 @@ def generate_plist():
     print(f"  launchctl unload {plist_path}")
     print(f"\nLogs will be written to: {script.parent}/everand_tracker.log")
 
+
+# TODO
+# - [ ] Finish implementing plist functions (load, unload, change when expiry is near)
 
 def load_plist():
     plist_path = Path.home() / "Library" / "LaunchAgents" / "com.everand.tracker.plist"
