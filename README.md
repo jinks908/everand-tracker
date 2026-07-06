@@ -268,12 +268,32 @@ crontab -e
 | File | Description | In git? |
 |------|-------------|---------|
 | `everand_tracker.py` | Main script | ✅ |
+| `test_everand_tracker.py` | Unit tests for batch-accounting logic | ✅ |
 | `config.example.json` | Example config with placeholder values | ✅ |
 | `config.json` | Your local config | ❌ `.gitignore` |
 | `credits.json` | Credit state (auto-generated) | ❌ `.gitignore` |
 | `session.json` | Playwright auth session (auto-generated) | ❌ `.gitignore` |
 | `everand_tracker.log` | launchd output log (auto-generated) | ❌ `.gitignore` |
 | `scraper_debug.html` | Debug output if scraping fails | ❌ `.gitignore` |
+
+---
+
+## Testing
+
+The core batch-accounting logic (`reconcile`, `total_active_credits`,
+`check_expiring`) is covered by a stdlib `unittest` suite in
+`test_everand_tracker.py`. Run it with:
+
+```bash
+python -m unittest test_everand_tracker
+```
+
+Add `-v` for per-test output.
+
+The suite has **no dependencies** — it stubs the `keyring` import at the top of
+the test file, so you don't need `keyring`, `playwright`, or `plyer` installed to
+run it. It covers credit arrivals (single, multi-batch, and partial deltas), FIFO
+usage draining, pre-delta expiry zeroing, and the expiry alert window boundaries.
 
 ---
 

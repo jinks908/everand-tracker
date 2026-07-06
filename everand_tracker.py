@@ -73,12 +73,13 @@ def total_active_credits(state: dict, today: date) -> int:
 
 
 ## Update Credit Count (Reconcile)
-def reconcile(state: dict, new_count: int, today: date) -> list[str]:
+def reconcile(state: dict, new_count: int, today: date) -> tuple[list[str], int]:
     """
     Compare new_count to the tracked state and update batches.
-    Returns a list of human-readable log messages.
+    Returns (log messages, number of newly-arrived credits).
     """
     logs = []
+    arrived = 0
     old_count = total_active_credits(state, today)
     delta = new_count - old_count
 
@@ -90,6 +91,7 @@ def reconcile(state: dict, new_count: int, today: date) -> list[str]:
 
     if delta > 0:
         # Credits increased — new batch(es) arrived
+        arrived = delta
         new_batches = delta // CREDITS_PER_MONTH
         leftover = delta % CREDITS_PER_MONTH
         for i in range(new_batches):
@@ -127,7 +129,7 @@ def reconcile(state: dict, new_count: int, today: date) -> list[str]:
 
     state["last_known_count"] = new_count
     state["last_run"] = today.isoformat()
-    return logs
+    return logs, arrived
 
 
 ## Check Expiration(s)
@@ -311,6 +313,122 @@ def notify(warnings: list[dict], config: dict):
             send_alerter_notification(warnings)
         else:
             print_console_alert(warnings)
+
+
+#:#  Arrival Notifications
+#;# ─────────────────────────────────────────────────────────────── #
+## Arrival Email
+def send_arrival_email(arrived: int, total: int, config: dict):
+    if not config.get("email_to"):
+        print("⚠️  Email not configured. Printing arrival alert to console instead.")
+        print_arrival_alert(arrived, total)
+        return
+
+    body = (
+        f"{arrived} new Everand unlock credit(s) just arrived.\n\n"
+        f"You now have {total} credit(s) available.\n\n"
+        "Log in to https://www.everand.com to use them."
+    )
+    msg = MIMEText(body)
+    msg["Subject"] = f"✨ {arrived} new Everand credit(s) added"
+    msg["From"] = config.get("email_from", config["email_to"])
+    msg["To"] = config["email_to"]
+
+    try:
+        host = config.get("smtp_host", "localhost")
+        port = int(config.get("smtp_port", 25))
+
+        with smtplib.SMTP(host, port) as server:
+            if config.get("smtp_user"):
+                server.starttls()
+                server.login(config["smtp_user"], keyring.get_password("everand_tracker", "smtp"))
+            server.send_message(msg)
+        print(f"📧  Arrival email sent to {config['email_to']}.")
+    except Exception as e:
+        print(f"❌  Failed to send email: {e}")
+        print_arrival_alert(arrived, total)
+
+
+## Arrival Desktop
+def send_arrival_desktop(arrived: int, total: int):
+    try:
+        from plyer import notification
+        notification.notify(
+            title="Everand Credits Added",
+            message=f"{arrived} new credit(s) arrived — {total} now available",
+            app_name="Everand Tracker",
+            timeout=10,
+        )
+        print("🔔  Desktop notification sent.")
+    except ImportError:
+        print("ℹ️   Install 'plyer' for desktop notifications: pip install plyer")
+        print_arrival_alert(arrived, total)
+    except Exception as e:
+        print(f"❌  Desktop notification failed: {e}")
+        print_arrival_alert(arrived, total)
+
+
+## Arrival Console
+def print_arrival_alert(arrived: int, total: int):
+    print("\n" + "=" * 59)
+    print("  ✨  NEW CREDITS ADDED")
+    print("=" * 59)
+    print(f"  {arrived} new credit(s) arrived — {total} now available.")
+    print("  → Go to https://www.everand.com to use them!\n")
+
+
+## Arrival Alerter (macOS)
+def send_arrival_alerter(arrived: int, total: int):
+    import subprocess
+
+    alerter_path = None
+    for candidate in ["/opt/homebrew/bin/alerter", "/usr/local/bin/alerter", "alerter"]:
+        if Path(candidate).is_file() or candidate == "alerter":
+            alerter_path = candidate
+            break
+
+    icon = Path(__file__).parent / "everand_icon.png"
+    try:
+        result = subprocess.run(
+            [
+                alerter_path,
+                "--title", "Everand Credits",
+                "--message", f"{arrived} new credit(s) arrived — {total} now available",
+                "--subtitle", "New unlock credits added",
+                "--app-icon", str(icon),
+                "--actions", "Go to Account",
+                "--timeout", "20",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        answer = result.stdout.strip()
+        if answer in ("@CONTENTCLICKED", "@ACTIONCLICKED", "Go to Account"):
+            subprocess.run(["open", "https://www.everand.com/your-account"])
+
+        print("🔔  Alerter notification sent.")
+    except FileNotFoundError:
+        print("❌  alerter not found in /opt/homebrew/bin or /usr/local/bin.")
+    except subprocess.CalledProcessError as e:
+        print(f"❌  alerter failed: {e}")
+
+
+## Arrival Dispatcher
+def notify_arrival(arrived: int, total: int, config: dict):
+    if arrived <= 0:
+        return
+    methods = config.get("notify_method", "console")
+    if isinstance(methods, str):
+        methods = [methods]
+    for method in methods:
+        if method == "email":
+            send_arrival_email(arrived, total, config)
+        elif method == "desktop":
+            send_arrival_desktop(arrived, total)
+        elif method == "alerter":
+            send_arrival_alerter(arrived, total)
+        else:
+            print_arrival_alert(arrived, total)
 
 
 #:#  Playwright Scraper
@@ -512,7 +630,7 @@ def run_setup():
     if initial.isdigit():
         today = date.today()
         state = load_state()
-        logs = reconcile(state, int(initial), today)
+        logs, _ = reconcile(state, int(initial), today)
         save_state(state)
         for log in logs:
             print(" ", log)
@@ -660,7 +778,7 @@ def main():
         return
 
     # Reconcile and save
-    logs = reconcile(state, new_count, today)
+    logs, arrived = reconcile(state, new_count, today)
     if next_batch_date is not None:
         state["next_batch_date"] = next_batch_date
     save_state(state)
@@ -669,6 +787,10 @@ def main():
         print(log)
 
     print_status(state, today)
+
+    # Notify when new credits arrive
+    if arrived:
+        notify_arrival(arrived, total_active_credits(state, today), config)
 
     # Check for expiring credits and notify
     warnings = check_expiring(state, today)
