@@ -278,7 +278,6 @@ def send_alerter_notification(warnings: list[dict]):
                 "--subtitle", summary,
                 "--app-icon", str(icon),
                 "--actions", "Go to Account",
-                "--timeout", "20",
             ],
             capture_output=True,
             text=True,
@@ -289,12 +288,12 @@ def send_alerter_notification(warnings: list[dict]):
             # Open user account page in the default browser
             subprocess.run(["open", "https://www.everand.com/your-account"])
 
-        # Print confirmation / failure messages
-        print("🔔  Alerter notification sent.")
+        if result.returncode == 0:
+            print("🔔  Alerter notification sent.")
+        else:
+            print(f"❌  alerter exited {result.returncode}: {result.stderr.strip()}")
     except FileNotFoundError:
         print("❌  alerter not found in /opt/homebrew/bin or /usr/local/bin.")
-    except subprocess.CalledProcessError as e:
-        print(f"❌  alerter failed: {e}")
 
 
 ## Notification Dispatcher
@@ -397,7 +396,6 @@ def send_arrival_alerter(arrived: int, total: int):
                 "--subtitle", "New unlock credits added",
                 "--app-icon", str(icon),
                 "--actions", "Go to Account",
-                "--timeout", "20",
             ],
             capture_output=True,
             text=True,
@@ -406,11 +404,12 @@ def send_arrival_alerter(arrived: int, total: int):
         if answer in ("@CONTENTCLICKED", "@ACTIONCLICKED", "Go to Account"):
             subprocess.run(["open", "https://www.everand.com/your-account"])
 
-        print("🔔  Alerter notification sent.")
+        if result.returncode == 0:
+            print("🔔  Alerter notification sent.")
+        else:
+            print(f"❌  alerter exited {result.returncode}: {result.stderr.strip()}")
     except FileNotFoundError:
         print("❌  alerter not found in /opt/homebrew/bin or /usr/local/bin.")
-    except subprocess.CalledProcessError as e:
-        print(f"❌  alerter failed: {e}")
 
 
 ## Arrival Dispatcher
